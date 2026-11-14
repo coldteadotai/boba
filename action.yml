@@ -1,0 +1,56 @@
+name: Boba
+description: Run a Playwright suite on Coldtea Boba and post one check with line annotations.
+author: Coldtea
+branding:
+  icon: check-circle
+  color: gray-dark
+inputs:
+  api-url:
+    description: Boba's address. Not needed on runs-on coldtea-boba, where the runner knows it.
+    default: ""
+  api-token:
+    description: Not needed on runs-on coldtea-boba, where Boba gives each job its own token. Kept for workflows that still pass one.
+    default: ""
+  secrets:
+    description: Not needed on runs-on coldtea-boba, whose runner lists the job's secrets for the check that runs before its machine is saved. Older runner images need toJSON(secrets) here.
+    default: ""
+  github-token:
+    description: Only used with api-token, to post the check run and the PR comment. On runs-on coldtea-boba, Boba posts them with its GitHub App.
+    default: ${{ github.token }}
+  project:
+    description: Playwright project to run. Empty runs every project.
+    default: ""
+  config:
+    description: The Playwright config file, relative to the checkout, when it isn't named playwright.config (what your workflow passes to playwright test -c).
+    default: ""
+  working-directory:
+    description: The directory holding the suite's playwright.config, relative to the checkout. Only needed when the repository has several configs.
+    default: ""
+  turbo:
+    description: true spreads the suite across several machines; false runs it on one.
+    default: "false"
+  playwright-args:
+    description: Extra arguments for playwright test, separated by spaces.
+    default: ""
+  suites:
+    description: |
+      Only for a job with more than one Playwright test step: those steps' runs, as a YAML list, so one Boba step runs them all at once and posts one check with a section each. Each item takes config, args and env (added to the step's environment), and an optional name. The step's own config and playwright-args run as one more suite. Leave it out for a job with one Playwright step.
+    default: ""
+  fail-fast:
+    description: On a pull request, true stops the run at its first test that fails after its retries, and the check says how many tests did not run; false runs the whole suite. Pushes and merge queues always run the whole suite.
+    default: "true"
+  timeout-minutes:
+    description: How long the step waits for results.
+    default: "60"
+  check-name:
+    description: Name of the check run.
+    default: Boba
+  post:
+    description: Set to false to print the check run instead of posting it.
+    default: "true"
+  job-id:
+    description: Attach to a Boba job that already exists instead of starting one.
+    default: ""
+runs:
+  using: node20
+  main: dist/index.js
