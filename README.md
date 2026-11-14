@@ -98,7 +98,7 @@ On `runs-on: coldtea-boba`, every input is optional.
 
 ## Security
 
-Your secrets stay out of saved runners and reports: each is scanned before it is kept or published, and withheld when a secret is found. See [how Boba handles your code and secrets](https://www.coldtea.ai/boba/security).
+Your secrets stay out of saved runners and reports: each is scanned before it is kept or published, and withheld when a secret is found. See [how Boba handles your code and secrets](https://www.coldtea.ai/docs/platform/teams-security/security-and-privacy#boba-ci-secrets-saved-runners-and-reports).
 
 ## License
 
