@@ -29,7 +29,7 @@ Then point `runs-on` at Boba and swap your test command for the Boba action. You
 
 Boba sets up your app on your first push. That's the only time you wait for setup. From your second push on, Boba starts your tests the moment you push.
 
-## Boba ran Documenso's tests 4x faster
+## 4x faster
 
 <p align="center">
   <img src=".github/assets/benchmark.png" alt="Documenso's suite: Boba Turbo took 3:18, Boba Standard 8:35, and Blacksmith on a 16 vCPU runner 12:19." width="100%">
