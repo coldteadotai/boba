@@ -52,5 +52,5 @@ inputs:
     description: Attaches the step to a Boba job that already exists, so Boba doesn't start a new one.
     default: ""
 runs:
-  using: node20
+  using: node24
   main: dist/index.js
