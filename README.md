@@ -83,6 +83,24 @@ concurrency:
   cancel-in-progress: true
 ```
 
+### Keep your build cache
+
+If your job builds a Next.js app, add this step just before the build. Each push then builds on the last one's cache, and Next.js recompiles only what changed. Boba restores it from the machine's own disk. On a 200-page Next.js app this took the build from 25 s to 10 s.
+
+```yaml
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock') }}-
+      - run: npm run build
+```
+
+- In a monorepo, set `path` to the `.next/cache` folder of each app the job builds.
+- Keep the commit in the key. Hashing your source files walks `node_modules` and adds seconds to every run.
+- If you build through Turborepo, cache `.turbo/cache` (or the `cacheDir` your `turbo.json` sets) the same way, with `turbo` in place of `nextjs` in both keys.
+
 ### Turn on Turbo
 
 ```yaml
