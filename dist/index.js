@@ -7408,8 +7408,14 @@ function historyUnreadLine(error) {
 }
 var HISTORY_LATE_LINE = "Earlier results were not back when the tests ended, so no failure is excused as also failing on main";
 var NAMES_WITHHELD_LINE = "Test names and errors are withheld: this run wrote values Boba could not check for your secrets, so none of its text is shown.";
-function timedOutLine(minutes) {
-  return `Boba stopped this job at its ${minutes}-minute limit.`;
+var BOBA_LIMIT_MINUTES = 60;
+function timedOutMessage(tier, minutes) {
+  switch (tier) {
+    case "standard":
+      return `Boba stopped this job at ${minutes} minutes. On Standard, this suite needs longer than that. Add \`turbo: true\` to the Boba step to run it faster, or split it into shards.`;
+    case "turbo":
+      return `Boba stopped this job at ${minutes} minutes. Split your suite into shards so each Boba job finishes within ${minutes} minutes.`;
+  }
 }
 var ANSI = new RegExp(String.raw`\u001b\[[0-9;?]*[A-Za-z]`, "g");
 var NO_HISTORY = {
@@ -7816,7 +7822,7 @@ function reportBody(input2) {
     ...input2.bobaFault && input2.stopped === null && ranTests ? ["", BOBA_BROKE_RUN] : []
   ];
   if (input2.stopped !== null || !ranTests) {
-    const text = input2.bobaFault || couldNotStart(input2) ? bobaFailed(input2) : couldntRun(input2);
+    const text = input2.timeLimitMinutes !== null ? stoppedAtLimit(input2, input2.timeLimitMinutes) : input2.bobaFault || couldNotStart(input2) ? bobaFailed(input2) : couldntRun(input2);
     return {
       title: text.title,
       markdown: [...text.lines, ...notes].join("\n"),
@@ -8057,7 +8063,6 @@ var BOBA_UNANSWERED = "Boba didn't answer this step, so nothing ran. That is Bob
 var BOBA_BROKE_RUN = "Boba failed during this run, so its result may be incomplete. That is Boba's failure, not your code's. This run is free: Boba doesn't bill a run it broke. Re-run the job for a complete result.";
 var BOBA_FAULT_FREE = "This run is free: Boba doesn't bill a run it broke.";
 var BOBA_FAULT_NEXT = {
-  TIMED_OUT: "Boba stops a job at 60 minutes. Split the suite into Boba jobs that each finish within that, then push again.",
   OUTSIDE_PULL_REQUEST: "Boba doesn't run pull requests from forks on this repository yet, so re-running won't change this. Its pushes and same-repository pull requests run as usual.",
   RUNNER_OTHER_REPO: null,
   RUNNER_OTHER_LANE: null,
@@ -8087,7 +8092,7 @@ function bobaFailed(input2) {
       ]
     };
   }
-  const title2 = input2.code === "TIMED_OUT" ? "Boba stopped this job at its 60-minute limit" : "Boba failed, not your code";
+  const title2 = "Boba failed, not your code";
   const next = input2.code !== null && input2.code in BOBA_FAULT_NEXT ? BOBA_FAULT_NEXT[input2.code] : "Re-run the job to run your tests.";
   return {
     title: title2,
@@ -8098,6 +8103,20 @@ function bobaFailed(input2) {
       "",
       BOBA_FAULT_FREE,
       ...next ? ["", next] : [],
+      "",
+      `[Full log](${input2.links.runUrl})`
+    ]
+  };
+}
+function stoppedAtLimit(input2, minutes) {
+  const title2 = `Boba stopped this job at ${minutes} minutes`;
+  return {
+    title: title2,
+    lines: [
+      `### \u26A0\uFE0F ${title2}`,
+      "",
+      timedOutMessage(input2.tier, minutes),
+      ...input2.bobaFault ? ["", BOBA_FAULT_FREE] : [],
       "",
       `[Full log](${input2.links.runUrl})`
     ]
@@ -8118,8 +8137,7 @@ function couldntRun(input2) {
   if (input2.code !== null && STEP_SETTINGS_CODES.has(input2.code))
     return stepSettingsWrong(input2, error);
   const appDidNotStart = /config\.webServer|webServer/.test(error);
-  const limit = input2.timeLimitMinutes;
-  const what = limit !== null ? timedOutLine(limit).replace(/\.$/, "") : appDidNotStart ? "The app didn't start, so nothing ran" : "Boba couldn't run your tests, so nothing ran";
+  const what = appDidNotStart ? "The app didn't start, so nothing ran" : "Boba couldn't run your tests, so nothing ran";
   const fix = missingVariableFix(error);
   const prompt = [
     `Boba couldn't run the Playwright tests of ${input2.links.repository}${input2.links.pullRequest ? ` pull request #${input2.links.pullRequest}` : ""} at commit ${short(input2.sha)}. ${what}. The error:`,
@@ -8134,7 +8152,7 @@ function couldntRun(input2) {
     lines: [
       "### \u26A0\uFE0F Couldn't run your tests",
       "",
-      limit !== null ? timedOutLine(limit) : `${what} on ${short(input2.sha)}`,
+      `${what} on ${short(input2.sha)}`,
       "",
       fence(truncate(error || "No error was reported", 3e3), ""),
       ...fix ? ["", fix] : [],
@@ -9045,6 +9063,9 @@ function failFastInput() {
       throw new Error(`fail-fast is true or false, not ${value}`);
   }
 }
+function stepLimitMinutes(waitMinutes) {
+  return Number.isFinite(waitMinutes) && waitMinutes > 0 ? waitMinutes : null;
+}
 function tierInput() {
   const turbo = input("turbo", "false");
   switch (turbo.toLowerCase()) {
@@ -9221,6 +9242,7 @@ async function main() {
     project: input("project"),
     playwrightArgs: input("playwright-args").split(/\s+/).filter(Boolean),
     failFast: failFastInput(),
+    timeoutMinutes: stepLimitMinutes(waitMinutes),
     workingDirectory: input("working-directory"),
     config: input("config"),
     environment,
@@ -9269,6 +9291,7 @@ async function main() {
     github,
     pullRequest,
     waitMinutes,
+    tier,
     history: () => {
       if (!history) {
         stopHistory.abort();
@@ -9363,8 +9386,9 @@ async function resultOf(input2) {
     ),
     generationMismatch: ran && job.generationMismatch,
     firstRun: ran && job.firstRun,
-    // Boba's own limit is 60 minutes; the step's is its timeout-minutes.
-    timeLimitMinutes: timedOut ? input2.waitMinutes : !ran && job.code === "TIMED_OUT" ? 60 : null,
+    // Boba's own limit, or the step's timeout-minutes when it stopped first.
+    timeLimitMinutes: timedOut ? input2.waitMinutes : !ran && job.code === "TIMED_OUT" ? BOBA_LIMIT_MINUTES : null,
+    tier: input2.tier,
     suitePassed: job.suitePassed,
     stoppedEarly: ran ? job.stoppedEarly : null,
     maskedValues: ran ? job.maskedValues : 0,
@@ -9419,6 +9443,7 @@ async function runSuites(run) {
         project: index === 0 ? input("project") : "",
         playwrightArgs: suite.args,
         failFast: failFastInput(),
+        timeoutMinutes: stepLimitMinutes(run.waitMinutes),
         workingDirectory: input("working-directory"),
         config: suite.config,
         environment,
@@ -9463,6 +9488,7 @@ async function runSuites(run) {
         github,
         pullRequest,
         waitMinutes: run.waitMinutes,
+        tier: run.tier,
         history: () => entry.history,
         reportName: `boba-report-${index}`
       });
